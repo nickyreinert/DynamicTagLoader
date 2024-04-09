@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic JS Library Loader</title>
+
+    <style>
+        /* CSS */
+
+        #jsLibInput {
+            width: 80%;
+            margin: 0 auto;
+
+        }
+        .request-container {
+            margin-bottom: 10px;
+            font-family: "Courier New", monospace; /* Fixed width font */
+        }
+
+        .request-url {
+            cursor: pointer;
+        }
+
+        .request-params {
+            display: none;
+            margin-left: 20px;
+            font-family: "Courier New", monospace; /* Fixed width font */
+        }
+    </style>
+
+</head>
+
+<body>
+    <input type="text" id="jsLibInput" placeholder="Enter URL of JavaScript library" value="">
+    <button id="loadButton">Load</button>
+    <button id="reloadButton">Reload</button>
+    <div id="output"></div>
+
+    <script>
+
+        var requestId = 1;
+        
+        var originalFetch = window.fetch;
+        window.fetch = function(input, init) {
+            return originalFetch(input, init).then(function(response) {
+                if (response.url) {
+                    handleRequest(response.url, 'fetch');
+                }
+                return response;
+            });
+        };
+        
+        var originalOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function(method, url) {
+            this.addEventListener('load', function() {
+                handleRequest(url, 'XHR');
+            });
+            originalOpen.apply(this, arguments);
+        };
+            
+        var originalImageConstructor = Image;
+        window.Image = function() {
+            var img = new originalImageConstructor();
+            var listener = function() {
+                handleRequest(img.src, 'Image');
+                img.removeEventListener('load', listener);
+            };
+            img.addEventListener('load', listener);
+            return img;
+        };
+
+        var originalCreateElement = document.createElement;
+        document.createElement = function(tagName) {
+            var element = originalCreateElement.call(document, tagName);
+            if (tagName === 'script') {
+
+                // Initialize a MutationObserver to monitor changes to attributes
+                var observer = new MutationObserver(function(mutationsList, observer) {
+                    mutationsList.forEach(function(mutation) {
+                        if (mutation.attributeName === 'src') {
+                            var src = element.getAttribute('src');
+                            if (src) {
+                                handleRequest(src, 'create Element');
+                            }
+                        }
+                    });
+                });
+                
+                // Configure and start observing attribute changes
+                observer.observe(element, { attributes: true });
+                
+                var originalSetAttribute = element.setAttribute;
+                element.setAttribute = function(name, value) {
+                    if (name === 'src' && value) {
+                        handleRequest(value, 'create Element');
+                    }
+                    originalSetAttribute.apply(this, arguments);
+                };
+            }
+            return element;
+        };
+        
+        var ready = function(callback) {
+            // in case the document is already rendered
+            if (document.readyState != 'loading') callback();
+            // modern browsers
+            else if (document.addEventListener) document.addEventListener('DOMContentLoaded', callback);
+            // IE <= 8
+            else document.attachEvent('onreadystatechange', function() {
+                if (document.readyState == 'complete') callback();
+            });
+        };
+        
+        ready(function() {
+            var url = getUrlFromCookie();
+            if (url !== null) {
+                document.getElementById('jsLibInput').value = url;
+                loadAndExecuteLibrary(url);
+            }
+        });
+        
+        document.getElementById('loadButton').addEventListener('click', function() {
+            var url = document.getElementById('jsLibInput').value.trim();
+            if (url !== "") {
+                saveUrlToCookie(url);
+                location.reload();
+            }
+        });
+
+        // Button to reload page
+        document.getElementById('reloadButton').addEventListener('click', function() {
+            location.reload();
+        });
+        // Function to handle request
+        function handleRequest(originalUrl, requestType) {
+            var output = document.getElementById('output');
+
+            // Create container for requests
+            var requestContainer = document.createElement('div');
+            requestContainer.classList.add('request-container');
+
+            var requestUrlElement = document.createElement('div');
+            requestUrlElement.classList.add('request-url');
+            requestUrlElement.dataset.url = originalUrl;
+            requestUrlElement.textContent = originalUrl.split('?')[0] + ' (' + requestType + ')';
+            requestUrlElement.addEventListener('click', function() {
+                toggleParamsVisibility(requestParams);
+            });
+
+            var requestParams = document.createElement('div');
+            requestParams.classList.add('request-params');
+            requestParams.style.display = 'none';
+
+            var urlWithoutParams = originalUrl.split('?')[0];
+            var params = originalUrl.split('?')[1];
+            if (params) {
+                params.split('&').forEach(function(param) {
+                    var paramElement = document.createElement('div');
+                    paramElement.textContent = param;
+                    requestParams.appendChild(paramElement);
+                });
+            }
+
+            // Append suffix indicating child elements
+            if (params) {
+                requestUrlElement.textContent = ' > ' + requestUrlElement.textContent;
+            }
+
+            requestContainer.appendChild(requestUrlElement);
+            requestContainer.appendChild(requestParams);
+
+            // Append request container to timestamp parent node
+            output.appendChild(requestContainer);
+        }
+
+
+        // Global function to toggle visibility of request parameters
+        function toggleParamsVisibility(paramsElement) {
+            if (paramsElement.style.display === 'none') {
+                paramsElement.style.display = 'block';
+            } else {
+                paramsElement.style.display = 'none';
+            }
+        }
+
+        document.getElementById('jsLibInput').addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                var url = this.value.trim();
+                if (url !== "") {
+                    saveUrlToCookie(url);
+                    location.reload();
+                }
+            }
+        });
+
+        function loadAndExecuteLibrary(url) {
+            var script = document.createElement('script');
+            script.src = url;
+            document.head.appendChild(script);
+        }
+
+        function saveUrlToCookie(url) {
+            document.cookie = "jsLibUrl=" + encodeURIComponent(url);
+        }
+
+        function getUrlFromCookie() {
+            var name = "jsLibUrl=";
+            var decodedCookie = decodeURIComponent(document.cookie);
+            var cookieArray = decodedCookie.split(';');
+            for(var i = 0; i < cookieArray.length; i++) {
+                var cookie = cookieArray[i].trim();
+                if (cookie.indexOf(name) == 0) {
+                    return cookie.substring(name.length, cookie.length);
+                }
+            }
+            return null;
+        }
+
+    </script>
+
+</body>
+</html>
