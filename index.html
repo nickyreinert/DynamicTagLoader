@@ -8,6 +8,9 @@
     <style>
         /* CSS */
 
+        html {
+            font-family: "Courier New", monospace; /* Fixed width font */
+        }
         #jsLibInput {
             width: 80%;
             margin: 0 auto;
@@ -25,16 +28,19 @@
         .request-params {
             display: none;
             margin-left: 20px;
-            font-family: "Courier New", monospace; /* Fixed width font */
         }
     </style>
 
 </head>
 
 <body>
+    <bold><center>see <a href="https://github.com/nickyreinert/DynamicTagLoader">github.com/nickyreinert/DynamicTagLoader</a></center></bold>
+    <hr />
+    
     <input type="text" id="jsLibInput" placeholder="Enter URL of JavaScript library" value="">
     <button id="loadButton">Load</button>
     <button id="reloadButton">Reload</button>
+    <hr />
     <div id="output"></div>
 
     <script>
